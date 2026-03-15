@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:enigmatics.org)",
+      "WebFetch(domain:cat.enigmatics.org)",
+      "WebFetch(domain:a4x.me)",
+      "WebFetch(domain:1012537429.neocities.org)",
+      "WebFetch(domain:thestringharmony.com)",
+      "WebFetch(domain:proxychains.pages.dev)",
+      "WebFetch(domain:paulschou.com)",
+      "WebFetch(domain:gchq.github.io)",
+      "WebFetch(domain:cryptii.com)",
+      "WebFetch(domain:www.dcode.fr)",
+      "WebFetch(domain:www.geocachingtoolbox.com)",
+      "WebFetch(domain:decipher.neocities.org)"
+    ]
+  }
+}
