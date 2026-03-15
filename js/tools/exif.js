@@ -59,6 +59,9 @@ function renderExif(container) {
     0x0211:'YCbCrCoefficients', 0x0212:'YCbCrSubSampling', 0x0213:'YCbCrPositioning',
     0x0214:'ReferenceBlackWhite', 0x8298:'Copyright',
     0x8769:'ExifIFD', 0x8825:'GPSIFD',
+    // Windows XP extended tags (UTF-16LE encoded, type BYTE)
+    0x9C9B:'XPTitle', 0x9C9C:'XPComment', 0x9C9D:'XPAuthor',
+    0x9C9E:'XPKeywords', 0x9C9F:'XPSubject',
   };
 
   const EXIF_TAGS = {
@@ -189,13 +192,18 @@ function renderExif(container) {
         const hdr = String.fromCharCode(bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7]);
         if (hdr === 'Exif') {
           parseTIFF(bytes, offset + 10, sections);
-        } else if (bytes[offset+4] === 0x68 && bytes[offset+5] === 0x74) { // "ht" = XMP
-          const xmpStr = new TextDecoder().decode(bytes.slice(offset + 4, offset + 4 + size - 2));
-          const desc = xmpStr.match(/xmp:(.+?)="([^"]+)"/g);
-          if (desc) {
-            sections.push({ title: 'XMP Metadata', rows: desc.map(m => { const p = m.split('='); return [p[0].replace('xmp:',''), p[1]?.replace(/"/g,'') || '']; }) });
+        } else {
+          // Check for XMP (namespace URI starts with "http://ns.adobe.com/xap/")
+          const app1Str = new TextDecoder('utf-8', { fatal: false }).decode(bytes.slice(offset + 4, offset + 4 + Math.min(64, size)));
+          if (app1Str.includes('xpacket') || app1Str.includes('xmpmeta') || app1Str.includes('x-default')) {
+            const xmpStr = new TextDecoder('utf-8', { fatal: false }).decode(bytes.slice(offset + 4, offset + 4 + size - 2));
+            const xmpRows = parseXMP(xmpStr);
+            if (xmpRows.length) sections.push({ title: 'XMP Metadata', rows: xmpRows });
           }
         }
+      } else if (marker === 0xED) { // APP13 — Photoshop / IPTC
+        const iptcRows = parseIPTC(bytes, offset + 4, size - 2);
+        if (iptcRows.length) sections.push({ title: 'IPTC Metadata', rows: iptcRows });
       } else if (marker === 0xE0) { // APP0 / JFIF
         if (size >= 16) {
           const densUnit = bytes[offset + 11];
@@ -307,8 +315,19 @@ function renderExif(container) {
     function readValue(typ, cnt, vOff, tagName) {
       try {
         switch (typ) {
-          case 1: // BYTE
-            return r16(vOff).toString();
+          case 1: { // BYTE — may be a UTF-16LE Windows XP tag
+            const WIN_XP = new Set(['XPTitle','XPComment','XPAuthor','XPKeywords','XPSubject']);
+            if (WIN_XP.has(tagName)) {
+              // Always use offset for these (they're almost always > 4 bytes)
+              const off = cnt > 4 ? r32(vOff) : vOff;
+              const slice = bytes.slice(tiffStart + off, tiffStart + off + cnt);
+              return new TextDecoder('utf-16le').decode(slice).replace(/\0+$/, '').trim() || null;
+            }
+            if (cnt <= 4) return bytes[tiffStart + vOff].toString();
+            const off = r32(vOff);
+            if (cnt <= 12) return Array.from({length: cnt}, (_, i) => bytes[tiffStart + off + i].toString(16).padStart(2,'0')).join(' ');
+            return `[${cnt} bytes]`;
+          }
 
           case 2: { // ASCII
             const off  = cnt > 4 ? r32(vOff) : vOff;
@@ -501,6 +520,142 @@ function renderExif(container) {
       if (type === 'IEND') break;
     }
     if (rows.length) sections.push({ title: 'PNG Metadata', rows });
+  }
+
+  // ── IPTC (APP13) parser ───────────────────────────────────────────────────────
+
+  const IPTC_DATASETS = {
+    5:'Title (Object Name)', 7:'Edit Status', 10:'Urgency', 15:'Category',
+    20:'Supplemental Categories', 22:'Fixture Identifier', 25:'Keywords',
+    26:'Content Location Code', 27:'Content Location Name',
+    30:'Release Date', 35:'Release Time', 37:'Expiration Date', 38:'Expiration Time',
+    40:'Special Instructions', 42:'Action Advised', 45:'Reference Service',
+    47:'Reference Date', 50:'Reference Number', 55:'Date Created', 60:'Time Created',
+    62:'Digital Creation Date', 63:'Digital Creation Time',
+    65:'Originating Program', 70:'Program Version', 75:'Object Cycle',
+    80:'Author (By-line)', 85:'Author Title (By-line Title)', 90:'City',
+    92:'Sub-location', 95:'Province/State', 100:'Country Code', 101:'Country Name',
+    103:'Original Transmission Reference', 105:'Headline', 110:'Credit',
+    115:'Source', 116:'Copyright Notice', 118:'Contact',
+    120:'Caption / Description', 121:'Local Caption', 122:'Caption Writer',
+    125:'Rasterized Caption', 130:'Image Type', 131:'Image Orientation',
+    135:'Language Identifier', 150:'Audio Type', 151:'Audio Sampling Rate',
+    152:'Audio Sampling Resolution', 153:'Audio Duration', 154:'Audio Outcue',
+    200:'ObjectData Preview File Format', 201:'ObjectData Preview File Format Version',
+    202:'ObjectData Preview Data',
+  };
+
+  function parseIPTC(bytes, start, length) {
+    const rows = [];
+    const end = start + length;
+    let i = start;
+
+    // Skip Photoshop header: "Photoshop 3.0\0" then Image Resource Blocks
+    const header = new TextDecoder('latin1').decode(bytes.slice(i, i + 13));
+    if (!header.startsWith('Photoshop 3.0')) return rows; // not a Photoshop APP13
+    i += 14; // "Photoshop 3.0\0"
+
+    // Walk Image Resource Blocks to find 0x0404 (IPTC-NAA)
+    while (i + 8 < end) {
+      const sig = String.fromCharCode(bytes[i], bytes[i+1], bytes[i+2], bytes[i+3]);
+      if (sig !== '8BIM') break;
+      const resType = (bytes[i+4] << 8) | bytes[i+5];
+      // Pascal string (pad to even length)
+      const nameLen = bytes[i+6] || 0;
+      const namePad = nameLen + (nameLen % 2 === 0 ? 2 : 1); // always even total
+      const dataLen = (bytes[i+6+namePad] << 24) | (bytes[i+7+namePad] << 16) |
+                      (bytes[i+8+namePad] << 8)  |  bytes[i+9+namePad];
+      const dataStart = i + 6 + namePad + 4;
+
+      if (resType === 0x0404) {
+        // Parse IPTC datasets
+        let j = dataStart;
+        const dataEnd = dataStart + dataLen;
+        while (j + 5 <= dataEnd) {
+          if (bytes[j] !== 0x1C) { j++; continue; } // tag marker
+          const record = bytes[j+1];
+          const dataset = bytes[j+2];
+          const dLen = (bytes[j+3] << 8) | bytes[j+4];
+          j += 5;
+          if (record === 2 && j + dLen <= dataEnd) {
+            const val = new TextDecoder('utf-8', { fatal: false })
+              .decode(bytes.slice(j, j + dLen)).trim();
+            if (val) {
+              const label = IPTC_DATASETS[dataset] || `Record 2:${dataset}`;
+              rows.push([label, val]);
+            }
+          }
+          j += dLen;
+        }
+      }
+
+      // Pad data length to even
+      const padded = dataLen + (dataLen % 2);
+      i = dataStart + padded;
+    }
+
+    return rows;
+  }
+
+  // ── XMP parser ────────────────────────────────────────────────────────────────
+
+  function parseXMP(xmpStr) {
+    const rows = [];
+    const seen = new Set();
+
+    const add = (label, value) => {
+      const v = value.trim().replace(/\s+/g, ' ');
+      if (v && !seen.has(label)) { rows.push([label, v]); seen.add(label); }
+    };
+
+    // Tags that hold rdf:Alt or rdf:Bag/Seq of rdf:li
+    const containerTags = [
+      ['dc:title',                  'Title'],
+      ['dc:description',            'Description'],
+      ['dc:subject',                'Keywords'],
+      ['dc:creator',                'Creator'],
+      ['dc:rights',                 'Rights'],
+      ['photoshop:Headline',        'Headline'],
+      ['photoshop:Instructions',    'Instructions'],
+      ['photoshop:Credit',          'Credit'],
+      ['photoshop:Source',          'Source'],
+      ['photoshop:City',            'City'],
+      ['photoshop:State',           'State'],
+      ['photoshop:Country',         'Country'],
+      ['photoshop:Category',        'Category'],
+      ['photoshop:SupplementalCategories', 'Supplemental Categories'],
+      ['Iptc4xmpCore:Location',     'Location'],
+      ['Iptc4xmpCore:CountryCode',  'Country Code'],
+      ['Iptc4xmpCore:Scene',        'Scene'],
+      ['Iptc4xmpCore:SubjectCode',  'Subject Code'],
+    ];
+
+    for (const [tag, label] of containerTags) {
+      const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
+      const m = xmpStr.match(re);
+      if (m) {
+        const liVals = [...m[1].matchAll(/<rdf:li[^>]*>([^<]+)<\/rdf:li>/g)].map(x => x[1].trim()).filter(Boolean);
+        if (liVals.length) add(label, liVals.join(', '));
+        else {
+          const plain = m[1].replace(/<[^>]+>/g, '').trim();
+          if (plain) add(label, plain);
+        }
+      }
+    }
+
+    // Simple attribute-form values (xmp:Rating="5", photoshop:DateCreated="2024-01-01", etc.)
+    const attrRe = /(?:xmp|photoshop|dc|aux|Iptc4xmpCore|xmpRights|xmpMM):(\w+)="([^"]+)"/g;
+    for (const m of xmpStr.matchAll(attrRe)) {
+      add(m[1], m[2]);
+    }
+
+    // Element-form simple values: <xmp:Rating>5</xmp:Rating>
+    const elemRe = /<(?:xmp|photoshop|aux):(\w+)>([^<]{1,200})<\/(?:xmp|photoshop|aux):\1>/g;
+    for (const m of xmpStr.matchAll(elemRe)) {
+      add(m[1], m[2]);
+    }
+
+    return rows;
   }
 
   // ── Embedded printable strings ───────────────────────────────────────────────
