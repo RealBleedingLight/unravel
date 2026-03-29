@@ -1,14 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="retro">
 <head>
   <meta charset="UTF-8">
+  <!-- Prevent theme flash: apply stored theme before CSS renders -->
+  <script>!function(){var t=localStorage.getItem('cs_theme')||'retro';document.documentElement.setAttribute('data-theme',t)}()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cipher & Signal</title>
+  <title>Unravel</title>
   <meta name="description" content="Puzzle solving toolkit — image, audio, cipher, and research tools">
   <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/tools.css">
+  <link rel="stylesheet" href="/css/theme.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600;700;800&family=Fira+Code:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600;700;800&family=Fira+Code:wght@300;400;500;600&family=IM+Fell+English:ital@0;1&family=Courier+Prime:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -18,19 +21,18 @@
       <canvas id="grid-canvas"></canvas>
     </div>
     <header class="landing-header">
-      <a href="/" class="landing-logo" id="home-link">C&S</a>
+      <a href="/" class="landing-logo" id="home-link">Unravel</a>
       <nav class="landing-nav">
         <a href="/toolkit" class="landing-nav-link" id="nav-toolkit">Toolkit</a>
         <a href="#about" class="landing-nav-link">About</a>
+        <a href="https://realbleedinglight.github.io/portfolio/" class="landing-nav-link" target="_blank" rel="noopener">Portfolio ↗</a>
       </nav>
     </header>
 
     <main class="landing-hero">
       <div class="hero-badge">PUZZLE SOLVING SUITE</div>
       <h1 class="hero-title">
-        <span class="hero-line hero-line-1">Cipher</span>
-        <span class="hero-amp">&</span>
-        <span class="hero-line hero-line-2">Signal</span>
+        <span class="hero-line hero-line-1">Unravel</span>
       </h1>
       <p class="hero-sub">Image analysis. Audio forensics. Classical ciphers. Research notebook.<br>Everything you need to crack puzzles — from CTFs to ARGs to web riddles.</p>
       <div class="hero-actions">
@@ -91,8 +93,8 @@
   <div id="toolkit-app" class="toolkit-hidden">
     <nav id="sidebar">
       <div class="sidebar-header">
-        <a href="/" class="logo-mark" id="back-home">C<span class="logo-amp">&</span>S</a>
-        <div class="logo-text">Cipher & Signal</div>
+        <a href="/" class="logo-mark" id="back-home">Unravel</a>
+        <div class="logo-text">Puzzle Toolkit</div>
       </div>
       <div class="nav-section">
         <div class="nav-label">IMAGE</div>
@@ -150,6 +152,11 @@
     <button id="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
   </div>
 
+  <!-- Theme toggle — always visible, bottom-right -->
+  <button id="theme-toggle" aria-label="Switch theme" data-current="retro">
+    <span class="tt-icon">⊡</span><span class="tt-text">NEO</span>
+  </button>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="/js/sync.js"></script>
   <script src="/js/router.js"></script>
@@ -163,6 +170,8 @@
   <script src="/js/tools/text.js"></script>
   <script src="/js/tools/notebook.js"></script>
   <script src="/js/tools/brute.js"></script>
+  <script src="/js/animations.js"></script>
+  <script src="/js/theme.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

@@ -3,7 +3,15 @@
    Dark terminal aesthetic with warm accents
    ====================================================== */
 
+/* Theme-neutral sizing — always active */
 :root {
+  --radius: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+}
+
+/* Neo theme variables (dark terminal) */
+[data-theme="neo"] {
   --bg-void: #06060b;
   --bg-deep: #0a0b12;
   --bg-primary: #0e1018;
@@ -27,9 +35,6 @@
   --font-display: 'Outfit', sans-serif;
   --font-mono: 'Fira Code', 'DM Mono', monospace;
   --font-body: 'DM Mono', 'Fira Code', monospace;
-  --radius: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 16px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

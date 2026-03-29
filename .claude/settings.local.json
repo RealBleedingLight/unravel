@@ -12,7 +12,9 @@
       "WebFetch(domain:cryptii.com)",
       "WebFetch(domain:www.dcode.fr)",
       "WebFetch(domain:www.geocachingtoolbox.com)",
-      "WebFetch(domain:decipher.neocities.org)"
+      "WebFetch(domain:decipher.neocities.org)",
+      "Bash(wc -l ./js/tools/*.js)",
+      "Bash(ls -1S ./js/tools/*.js)"
     ]
   }
 }
